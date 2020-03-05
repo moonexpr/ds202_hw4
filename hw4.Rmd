@@ -1,0 +1,118 @@
+---
+  title: "Homework 4"
+  author: "John Chandara <mrpotatofactory@gmail.com>"
+  date: "3/4/2020"
+  output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Chick weights
+
+The `ChickWeight` data set is part of the base package `datasets`. See `?ChickWeight` for details on the data.
+For all of the questions use `dplyr` functions with the pipe `%>%` whenever possible.
+
+```{R}
+  library(datasets)
+  library(dplyr)
+  library(tidyverse)
+```
+
+**Submission instructions**: Create a folder named `ds202_hw4`, and name the RMarkDown file including your solutions `hw4.Rmd` under this folder. For the submission, create a GitHub repository named `ds202_hw4` under your GitHub account, and push both `hw4.Rmd` and the knitted `hw4.html` before the deadline. I will assume you use the same GitHub username as for your HW3 submission. The latest version of your homework appearing on GitHub before the deadline is graded. *It is crucial to follow the exact folder structure and file names*. This homework is **due on March 4** before class.
+
+1. Get a frequency breakdown of the number of chicks, their average weight and the standard deviation of the weights in each of the diets at the start of the study. Store the resulting data frame in a variable named `weight0` and print.
+
+```{R}
+  weight0 <- ChickWeight %>%
+    summarize(n = n(), avg_weight = mean(weight), sd_weight = sd(weight))
+
+  print(weight0)
+```
+
+<!-- 5 pts of extra credit: construct a ggplot that shows average weights by diet with an interval (shown as a line) of +- the standard deviation around the averages. -->
+2. Each chick should have twelve weight measurements. Use the `dplyr` package to identify how many measurements are there for each chick. Extract a subset of the data for all chicks with complete information, name the data set `complete`, and print the first 3 rows. (Hint: you might want to use mutate to introduce a helper variable consisting of the number of observations)
+
+```{R}
+CompleteChicks <- count(ChickWeight %>% group_by(Chick)) %>% filter(n == 12) %>% select(Chick)
+complete <- ChickWeight %>% filter(Chick %in% CompleteChicks$Chick)
+
+head(complete, n = 3)
+```
+
+
+3. In the complete data set introduce a new variable that measures the current weight difference compared to day 0. Name this variable  `weightgain` and print the first 3 rows of the new data frame.
+
+```{r}
+
+
+tmp <- complete %>% filter(Time == 0) %>% select(Chick)
+initialChicks <- complete %>% filter(Time == 0)
+finalChicks <- complete %>% filter(Time == 21)
+tmp$weightgain <- finalChicks$weight - initialChicks$weight
+complete <- left_join(complete, tmp, by='Chick')
+```
+
+4. Use `{ggplot2}` to create side-by-side boxplots of `weightgain` by `Diet` for day 21. Change the order of the categories in the Diet variable such that the boxplots are ordered by median `weightgain`, and the lower limit of the y axis should be 0. Describe the relationship in 2-3 sentences. 
+
+```{r}
+
+complete$Diet <- factor(
+  complete$Diet,
+  levels = levels(with(complete, reorder(Diet, weightgain, median)))
+)
+
+complete %>%
+  ggplot(aes(y = weightgain)) +
+  geom_boxplot() +
+  labs(title = 'Weight gain over various diets') +
+  facet_grid(cols = vars(complete$Diet), scales = 'free_y')
+```
+
+It's clear that Diet #3 is the most effective diet with a median weight gain easily surpassing the rest of the diets, as for the least effective Diet #1 reports significantly less weight gain over the course of 21 days. On the topic of the IRQ, it appears Diet #1 and #4 appear to be most consistent in terms of final results, both diets appear with a much smaller inter-quartile range compared to Diet #2 and #3. Based on these observations we can conclude that Diet #4 is most effective by reason of a higher median of weight gains compared to the rest of the diets.
+
+5. Which chick gained the most weight and which gained the least weight, and What diets were they on?
+```{r}
+  complete %>% filter(Time == 0 & weightgain == max(weightgain)) %>% select(Chick, weightgain, Diet)
+  complete %>% filter(Time == 0 & weightgain == min(weightgain)) %>% select(Chick, weightgain, Diet)
+```
+For most weight gained, we find that Chick #35 appears to have benefited the most from Diet #3, with a gain of 332oz over the course of 21 days. On the polar side of weight gain, Chick #24 only benefited with an increase of 32oz over the course of 21 days. This observation supports our previous findings in that Diet #3 is the most effective for weight gain and Diet #2 is least effective, there many be reason to question these findings as our proven least effective diet is Diet #1. However, due to the high inter-quartile range of Diet #2, these suspicions can safely be dismissed as Diet #2 easily compensates for a large range of differing weight gains.
+
+
+6. For the chicks with the least and the most weight at time 0, plot their growth trajectories over time.
+```{r}
+    weakest <- complete %>% filter(weight == min(initialChicks$weight))
+    strongest <- complete %>% filter(weight == max(initialChicks$weight))
+    
+    cmp <- complete %>% filter(Chick %in% weakest$Chick | Chick %in% strongest$Chick)
+    cmp$strong <- cmp$Chick %in% strongest$Chick
+    
+    cmp %>%
+      ggplot(aes(x = Time, y = weight, group = Chick, color = Chick)) +
+      geom_line() +
+      facet_grid(col = vars(strong)) +
+      stat_summary(fun.y=mean, geom="line", lwd=2, aes(group = 1)) +
+      labs(title = 'Do stronger chicks tend to a higher weight over time?') + scale_fill_gradient2()
+```
+
+7. Add to the previous plot the average growth trajectory for all chicks (calculated as the mean weight for each chick at each time). How do the trajectories compare?
+
+```{r}
+
+meanWeight <- complete %>% group_by(Time) %>% summarize(mean(weight))
+names(meanWeight) <- c('Time', 'Mean')
+complete %>%
+  ggplot(aes(y = weight, x = Time, group = Chick)) +
+  geom_line() + 
+  stat_summary(fun.y=mean, geom="line", lwd=2, aes(group = 1, colour = 'blue'))
+```
+
+The slope of the regression line appears to be sound with our previous survey regarding initial weights namely, both appear positive in roughly the same amount of change. One thing worth noting is that chicks who initially are weaker appear to have a much higher slope regarding the later porition of the experiment (i.e their height appears much more linear compared to their stronger counterparts).
+
+8. What else do you find interesting in the dataset? Show your exploratory analysis.
+
+Regardless of diet it appears there's little deviation in terms of weight change on a day-to-day basis. In the aforementioned graphic, it's rather trivial to see a clustering of weight increases for many different chicks around the same area. Aside from outliers resulting from the two chicks on the top and the two chicks on the bottom, the diets presented in this study do not appear to have the ability to enforce cause the data to flow in a bimodal distribution (i.e. while there may exist a diet which is proven more effective than others, the diet does not pose significant change in the overall scheme of a chicken's growth)
+
+
+Note: your submission is supposed to be fully reproducible, i.e. the TA and I will 'knit' your submission in RStudio. 
